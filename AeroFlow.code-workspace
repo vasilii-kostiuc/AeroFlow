@@ -1,0 +1,29 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"[php]": {
+			"editor.defaultFormatter": "junstyle.php-cs-fixer",
+			"editor.formatOnSave": true
+		},
+		"php-cs-fixer.executablePath": "${workspaceFolder}/aeroflow-core/vendor/bin/php-cs-fixer",
+		"php-cs-fixer.config": "aeroflow-core/.php-cs-fixer.dist.php",
+		"php-cs-fixer.allowRisky": true,
+		"php-cs-fixer.ignorePHPVersion": true,
+		"php-cs-fixer.onsave": true,
+		"phpstan.rootDir": "${workspaceFolder}/aeroflow-core",
+		"phpstan.binPath": "vendor/bin/phpstan",
+		"phpstan.configFile": "phpstan.neon.dist",
+		"phpstan.enabled": true,
+		"phpstan.singleFileMode": false,
+		"phpstan.projectTimeout": 300000
+	},
+	"extensions": {
+		"recommendations": [
+			"junstyle.php-cs-fixer"
+		]
+	}
+}

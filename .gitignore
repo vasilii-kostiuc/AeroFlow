@@ -1,0 +1,7 @@
+# Service repositories are versioned independently (polyrepo).
+# This umbrella repo tracks only cross-cutting workspace files.
+/aeroflow-core/
+/aeroflow-web/
+/aeroflow-docs/
+/aeroflow-agent/
+/aeroflow-playback/
