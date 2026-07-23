@@ -5,3 +5,8 @@
 /aeroflow-docs/
 /aeroflow-agent/
 /aeroflow-playback/
+/aeroflow-tts/
+.dev-web.pid
+.dev-web.log
+.dev-agent.pid
+.dev-agent.log
