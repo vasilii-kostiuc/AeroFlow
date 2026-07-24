@@ -85,6 +85,11 @@
   и переозвучить уже сохранённые объявления:
   `docker compose -f aeroflow-core/docker-compose.yml -p aeroflow-core exec aeroflow_core_app \
    php bin/console app:announcements:seed-configs --limit=24 --revoice`
+* **Дополнительные (аэропортовые) объявления** — пресеты «Дополнительно» старой САО
+  (безопасность, такси, ручная кладь, регистрация и т.д.) сидятся отдельной командой,
+  тоже озвучивая тексты через TTS (идемпотентна по имени, `--revoice` пересоздаёт):
+  `docker compose -f aeroflow-core/docker-compose.yml -p aeroflow-core exec aeroflow_core_app \
+   php bin/console app:announcements:seed-supplementary`
 * Web и host-агент запускаются в фоне; их PID/логи в корне —
   `.dev-web.pid`/`.dev-web.log` и `.dev-agent.pid`/`.dev-agent.log` (все в
   `.gitignore`). Смотреть лог: `./dev.sh logs web` / `./dev.sh logs agent`.
