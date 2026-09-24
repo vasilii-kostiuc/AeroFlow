@@ -31,8 +31,10 @@
    первым, потому что владеет общим брокером RabbitMQ на порту `5672`, к которому
    по `host.docker.internal` подключаются остальные сервисы. `--wait` держит
    старт, пока брокер не станет healthy.
-2. **playback** — свой Postgres (порт `5433`) + worker; подключается к брокеру
-   core.
+2. **playback** — свой Postgres (порт `5433`) + два worker'а; подключается к
+   брокеру core. Второй worker слушает только `emergency_commands` (задача 026):
+   команда включения/снятия экстренного режима не должна ждать, пока основной
+   worker доработает очередь обычных объявлений.
 3. **tts** — сервис синтеза речи (`aeroflow-tts`). Свой compose-проект, слушает
    `8081`; core зовёт его по HTTP при сохранении текста объявления. Первая
    сборка долгая: в образ кладётся бинарник Piper и ~250 МБ голосовых моделей
@@ -90,6 +92,15 @@
   тоже озвучивая тексты через TTS (идемпотентна по имени, `--revoice` пересоздаёт):
   `docker compose -f aeroflow-core/docker-compose.yml -p aeroflow-core exec aeroflow_core_app \
    php bin/console app:announcements:seed-supplementary`
+* **Экстренные объявления** — пресеты раздела «Экстренные» старой САО (пожар,
+  проверка сигнализации, эвакуация, отмена тревоги) сидятся своей командой, тоже
+  через TTS (идемпотентна по имени, `--revoice` пересоздаёт):
+  `docker compose -f aeroflow-core/docker-compose.yml -p aeroflow-core exec aeroflow_core_app \
+   php bin/console app:announcements:seed-emergency`
+  Дальше их можно править и дополнять на экране «Экстренные объявления»
+  (`http://localhost:5173/emergency-announcements`), а диспетчер запускает их
+  кнопкой «Экстренное объявление» на своей панели. Сам сид ничего не запускает и
+  экстренный режим не включает.
 * Web и host-агент запускаются в фоне; их PID/логи в корне —
   `.dev-web.pid`/`.dev-web.log` и `.dev-agent.pid`/`.dev-agent.log` (все в
   `.gitignore`). Смотреть лог: `./dev.sh logs web` / `./dev.sh logs agent`.
