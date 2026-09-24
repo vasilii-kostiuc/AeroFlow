@@ -101,6 +101,9 @@
   (`http://localhost:5173/emergency-announcements`), а диспетчер запускает их
   кнопкой «Экстренное объявление» на своей панели. Сам сид ничего не запускает и
   экстренный режим не включает.
+* **Операционный день** панели диспетчера core считает по часовому поясу
+  аэропорта — переменная `AIRPORT_TIMEZONE` в `aeroflow-core/.env` (IANA-имя, по
+  умолчанию `Europe/Chisinau`), а не по часам браузера (задача 027).
 * Web и host-агент запускаются в фоне; их PID/логи в корне —
   `.dev-web.pid`/`.dev-web.log` и `.dev-agent.pid`/`.dev-agent.log` (все в
   `.gitignore`). Смотреть лог: `./dev.sh logs web` / `./dev.sh logs agent`.
