@@ -104,6 +104,24 @@
 * **Операционный день** панели диспетчера core считает по часовому поясу
   аэропорта — переменная `AIRPORT_TIMEZONE` в `aeroflow-core/.env` (IANA-имя, по
   умолчанию `Europe/Chisinau`), а не по часам браузера (задача 027).
+* **Пользователи и роли** (задача 033). Самостоятельной регистрации нет —
+  учётки создаёт администратор на экране «Пользователи». Фикстуры core
+  (`doctrine:fixtures:load`) дают `admin@aeroflow.local` (администратор),
+  `dispatcher@aeroflow.local` (диспетчер) и `operator@aeroflow.local` (без роли —
+  экран «Нет доступа»), пароль у всех `AeroFlow123!`. На чистой БД без фикстур
+  первого администратора создаёт консоль:
+  `docker compose -f aeroflow-core/docker-compose.yml -p aeroflow-core exec -u www-data aeroflow_core_app \
+   php bin/console app:users:create admin@example.org --role=admin`
+  (пароль спросит интерактивно; `--role` — `admin`, `dispatcher` или `none`).
+* **Состояние системы** (задача 034) — экран администратора
+  `http://localhost:5173/system-status`; диспетчер видит в панели красный баннер,
+  если объявления могут не прозвучать. Воркеры core и playback раз в 15 с пишут
+  heartbeat, остановленный воркер считается неработающим через 60 с. Агента core
+  видит через management API RabbitMQ (`RABBITMQ_MANAGEMENT_URL`, в compose уже
+  задан) по числу подписчиков на `agent_commands`: если host-агент не
+  стартовал, экран сразу показывает его как «Не подключён». Проверка руками:
+  `docker stop aeroflow_playback_worker` — через минуту предупреждение на экране и
+  в панели, `docker start aeroflow_playback_worker` — пропадает.
 * Web и host-агент запускаются в фоне; их PID/логи в корне —
   `.dev-web.pid`/`.dev-web.log` и `.dev-agent.pid`/`.dev-agent.log` (все в
   `.gitignore`). Смотреть лог: `./dev.sh logs web` / `./dev.sh logs agent`.
