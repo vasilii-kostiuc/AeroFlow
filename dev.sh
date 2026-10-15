@@ -176,7 +176,7 @@ cmd_up() {
     [ "$arg" = "--sim-agent" ] && sim_agent=1
   done
 
-  log "1/5 core (Postgres + RabbitMQ + nginx + worker)…"
+  log "1/5 core (Postgres + RabbitMQ + nginx + worker + outbox relay)…"
   docker compose "${CORE_DC[@]}" up -d --wait
   [ "$do_migrate" = 1 ] && migrate_one core aeroflow_core_app "${CORE_DC[@]}"
 

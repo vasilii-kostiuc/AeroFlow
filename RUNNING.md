@@ -27,9 +27,9 @@
 
 `dev.sh up` поднимает сервисы строго по очереди:
 
-1. **core** (`up -d --wait`) — Postgres + **RabbitMQ** + nginx + worker. Идёт
-   первым, потому что владеет общим брокером RabbitMQ на порту `5672`, к которому
-   по `host.docker.internal` подключаются остальные сервисы. `--wait` держит
+1. **core** (`up -d --wait`) — Postgres + **RabbitMQ** + nginx + worker + outbox
+   relay. Идёт первым, потому что владеет общим брокером RabbitMQ на порту `5672`,
+   к которому по `host.docker.internal` подключаются остальные сервисы. `--wait` держит
    старт, пока брокер не станет healthy.
 2. **playback** — свой Postgres (порт `5433`) + два worker'а; подключается к
    брокеру core. Второй worker слушает только `emergency_commands` (задача 026):
@@ -122,6 +122,12 @@
   стартовал, экран сразу показывает его как «Не подключён». Проверка руками:
   `docker stop aeroflow_playback_worker` — через минуту предупреждение на экране и
   в панели, `docker start aeroflow_playback_worker` — пропадает.
+* **Outbox** (задача 035). Core не шлёт команды в playback напрямую: он пишет их в
+  таблицу `outbox_message`, а доставляет контейнер `aeroflow_core_outbox_relay`.
+  Если relay остановлен, действия диспетчера работают, но объявления не уходят в
+  playback — строки копятся в `outbox_message` и уйдут после `docker start`. Relay
+  должен быть ровно один. После правки кода relay, как и воркеры, нужно
+  перезапустить.
 * Web и host-агент запускаются в фоне; их PID/логи в корне —
   `.dev-web.pid`/`.dev-web.log` и `.dev-agent.pid`/`.dev-agent.log` (все в
   `.gitignore`). Смотреть лог: `./dev.sh logs web` / `./dev.sh logs agent`.
