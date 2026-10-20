@@ -1,0 +1,146 @@
+# Production stack on one host. Images come from GHCR — each service repository
+# builds and pushes its own (.github/workflows/image.yml); nothing is built here.
+# Secrets and the domain are read from .env next to this file (.env.example).
+#
+# Only Caddy publishes ports. Postgres, RabbitMQ, core, playback and tts are
+# reachable inside this compose network only.
+name: aeroflow
+
+x-infra: &infra
+  postgres:
+    condition: service_healthy
+  rabbitmq:
+    condition: service_healthy
+
+x-core: &core
+  image: ghcr.io/vasilii-kostiuc/aeroflow-core:${CORE_TAG:-latest}
+  restart: unless-stopped
+  depends_on: *infra
+  environment:
+    APP_ENV: prod
+    APP_SECRET: ${CORE_APP_SECRET}
+    DEFAULT_URI: https://${DOMAIN}
+    DATABASE_URL: postgresql://aeroflow:${CORE_DB_PASSWORD}@postgres:5432/aeroflow?serverVersion=16&charset=utf8
+    MESSENGER_TRANSPORT_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/announcement_playback
+    MESSENGER_PLAYBACK_EVENTS_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/playback_events
+    MESSENGER_EMERGENCY_COMMANDS_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/emergency_commands
+    RABBITMQ_MANAGEMENT_URL: http://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:15672
+    TTS_BASE_URL: http://tts:8080
+    AIRPORT_TIMEZONE: ${AIRPORT_TIMEZONE:-Europe/Chisinau}
+    JWT_PASSPHRASE: ${JWT_PASSPHRASE}
+
+x-playback: &playback
+  image: ghcr.io/vasilii-kostiuc/aeroflow-playback:${PLAYBACK_TAG:-latest}
+  restart: unless-stopped
+  depends_on: *infra
+  mem_limit: 192m
+  environment:
+    APP_ENV: prod
+    APP_SECRET: ${PLAYBACK_APP_SECRET}
+    DATABASE_URL: postgresql://playback:${PLAYBACK_DB_PASSWORD}@postgres:5432/aeroflow_playback?serverVersion=16&charset=utf8
+    MESSENGER_TRANSPORT_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/announcement_playback
+    MESSENGER_PLAYBACK_EVENTS_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/playback_events
+    MESSENGER_EMERGENCY_COMMANDS_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/emergency_commands
+    MESSENGER_AGENT_COMMANDS_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/agent_commands
+    MESSENGER_AGENT_EVENTS_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/agent_events
+    MESSENGER_SCHEDULER_TRANSPORT_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/playback_scheduler
+
+services:
+  # HTTPS entry point (certificate from Let's Encrypt for ${DOMAIN}), the web SPA
+  # and the /api route to core's PHP-FPM.
+  caddy:
+    image: ghcr.io/vasilii-kostiuc/aeroflow-web:${WEB_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - core-app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  core-app:
+    <<: *core
+    mem_limit: 256m
+    volumes:
+      - core_jwt:/var/www/config/jwt
+      - core_audio:/var/www/var/audio-assets
+
+  core-worker:
+    <<: *core
+    user: www-data
+    mem_limit: 192m
+    command: php bin/console messenger:consume playback_events --time-limit=3600 --memory-limit=128M
+
+  # Exactly one instance: order within a queue relies on a single sender.
+  core-outbox-relay:
+    <<: *core
+    user: www-data
+    mem_limit: 192m
+    command: php bin/console app:outbox:relay
+
+  playback-worker:
+    <<: *playback
+    command: php bin/console messenger:consume announcement_playback agent_events scheduler --time-limit=3600 --memory-limit=128M
+
+  # Emergency mode commands get their own worker, not just their own queue
+  # (ADR 002, level 2).
+  playback-emergency-worker:
+    <<: *playback
+    command: php bin/console messenger:consume emergency_commands --time-limit=3600 --memory-limit=128M
+
+  # Piper runs as a child process per synthesis request; the limit keeps one
+  # long text from taking the whole host.
+  tts:
+    image: ghcr.io/vasilii-kostiuc/aeroflow-tts:${TTS_TAG:-latest}
+    restart: unless-stopped
+    mem_limit: 512m
+
+  # One server, two databases: aeroflow (core) and aeroflow_playback (created by
+  # postgres/init-playback-db.sh on the first start of an empty volume).
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    command: postgres -c shared_buffers=64MB -c max_connections=30 -c work_mem=4MB
+    environment:
+      POSTGRES_DB: aeroflow
+      POSTGRES_USER: aeroflow
+      POSTGRES_PASSWORD: ${CORE_DB_PASSWORD}
+      PLAYBACK_DB_PASSWORD: ${PLAYBACK_DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init-playback-db.sh:/docker-entrypoint-initdb.d/10-playback-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aeroflow -d aeroflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    # RabbitMQ keeps its data per node name, which is derived from the hostname:
+    # a fixed hostname keeps queues and the user across container re-creation.
+    hostname: rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: aeroflow
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+volumes:
+  caddy_data:
+  caddy_config:
+  core_jwt:
+  core_audio:
+  postgres_data:
+  rabbitmq_data:
