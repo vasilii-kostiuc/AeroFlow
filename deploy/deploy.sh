@@ -5,6 +5,10 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Without .env every secret is blank, and Postgres and RabbitMQ would keep the
+# blank credentials from their first start: stop before creating anything.
+[ -f .env ] || { echo "$(pwd)/.env not found: create it from .env.example" >&2; exit 1; }
+
 docker compose pull --quiet
 docker compose up -d --wait postgres rabbitmq
 
