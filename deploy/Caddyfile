@@ -1,0 +1,28 @@
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Core API: every /api request runs core's front controller in PHP-FPM.
+	# REQUEST_URI keeps the original path, so Symfony routing sees /api/...
+	handle /api/* {
+		rewrite * /index.php?{query}
+		reverse_proxy core-app:9000 {
+			transport fastcgi {
+				root /var/www/public
+				split .php
+			}
+		}
+	}
+
+	# The agent's download contract has no authentication yet (network trust of
+	# a local installation), so it is not published on the internet.
+	handle /internal/* {
+		respond 404
+	}
+
+	# Everything else is the web SPA baked into this image.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

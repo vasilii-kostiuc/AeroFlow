@@ -1,0 +1,44 @@
+# Deploys the stack in deploy/ to the server: uploads the stack definition and
+# runs deploy.sh there (pull images from GHCR, migrate, restart). Images are
+# built by each service repository's own workflow.
+#
+# Repository settings:
+#   secrets.DEPLOY_SSH_KEY      private key whose public half is in the server
+#                               user's ~/.ssh/authorized_keys
+#   secrets.DEPLOY_KNOWN_HOSTS  output of `ssh-keyscan <host>`
+#   vars.DEPLOY_HOST            server address
+#   vars.DEPLOY_USER            server user (member of the docker group)
+name: deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths: ['deploy/**']
+
+concurrency: deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      TARGET: ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      # .env holds the server's secrets and is never uploaded or deleted.
+      - name: Upload stack definition
+        run: rsync -az --delete --exclude .env deploy/ "$TARGET:aeroflow/"
+
+      - name: Deploy
+        run: ssh "$TARGET" ./aeroflow/deploy.sh
