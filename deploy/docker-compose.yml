@@ -1,6 +1,7 @@
 # Production stack on one host. Images come from GHCR — each service repository
 # builds and pushes its own (.github/workflows/image.yml); nothing is built here.
-# Secrets and the domain are read from .env next to this file (.env.example).
+# Secrets, the domain and the addresses of the databases and the broker are
+# read from .env next to this file (.env.example).
 #
 # Only Caddy publishes ports. Postgres, RabbitMQ, core, playback and tts are
 # reachable inside this compose network only.
@@ -20,11 +21,11 @@ x-core: &core
     APP_ENV: prod
     APP_SECRET: ${CORE_APP_SECRET}
     DEFAULT_URI: https://${DOMAIN}
-    DATABASE_URL: postgresql://aeroflow:${CORE_DB_PASSWORD}@postgres:5432/aeroflow?serverVersion=16&charset=utf8
-    MESSENGER_TRANSPORT_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/announcement_playback
-    MESSENGER_PLAYBACK_EVENTS_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/playback_events
-    MESSENGER_EMERGENCY_COMMANDS_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/emergency_commands
-    RABBITMQ_MANAGEMENT_URL: http://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:15672
+    DATABASE_URL: ${CORE_DATABASE_URL:?}
+    MESSENGER_TRANSPORT_DSN: ${RABBITMQ_URL:?}/announcement_playback
+    MESSENGER_PLAYBACK_EVENTS_DSN: ${RABBITMQ_URL:?}/playback_events
+    MESSENGER_EMERGENCY_COMMANDS_DSN: ${RABBITMQ_URL:?}/emergency_commands
+    RABBITMQ_MANAGEMENT_URL: ${RABBITMQ_MANAGEMENT_URL:?}
     TTS_BASE_URL: http://tts:8080
     AIRPORT_TIMEZONE: ${AIRPORT_TIMEZONE:-Europe/Chisinau}
     JWT_PASSPHRASE: ${JWT_PASSPHRASE}
@@ -37,13 +38,13 @@ x-playback: &playback
   environment:
     APP_ENV: prod
     APP_SECRET: ${PLAYBACK_APP_SECRET}
-    DATABASE_URL: postgresql://playback:${PLAYBACK_DB_PASSWORD}@postgres:5432/aeroflow_playback?serverVersion=16&charset=utf8
-    MESSENGER_TRANSPORT_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/announcement_playback
-    MESSENGER_PLAYBACK_EVENTS_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/playback_events
-    MESSENGER_EMERGENCY_COMMANDS_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/emergency_commands
-    MESSENGER_AGENT_COMMANDS_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/agent_commands
-    MESSENGER_AGENT_EVENTS_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/agent_events
-    MESSENGER_SCHEDULER_TRANSPORT_DSN: amqp://aeroflow:${RABBITMQ_PASSWORD}@rabbitmq:5672/%2f/playback_scheduler
+    DATABASE_URL: ${PLAYBACK_DATABASE_URL:?}
+    MESSENGER_TRANSPORT_DSN: ${RABBITMQ_URL:?}/announcement_playback
+    MESSENGER_PLAYBACK_EVENTS_DSN: ${RABBITMQ_URL:?}/playback_events
+    MESSENGER_EMERGENCY_COMMANDS_DSN: ${RABBITMQ_URL:?}/emergency_commands
+    MESSENGER_AGENT_COMMANDS_DSN: ${RABBITMQ_URL:?}/agent_commands
+    MESSENGER_AGENT_EVENTS_DSN: ${RABBITMQ_URL:?}/agent_events
+    MESSENGER_SCHEDULER_TRANSPORT_DSN: ${RABBITMQ_URL:?}/playback_scheduler
 
 services:
   # HTTPS entry point (certificate from Let's Encrypt for ${DOMAIN}), the web SPA
