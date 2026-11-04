@@ -3,8 +3,9 @@
 # Secrets, the domain and the addresses of the databases and the broker are
 # read from .env next to this file (.env.example).
 #
-# Only Caddy publishes ports. Postgres, RabbitMQ, core, playback and tts are
-# reachable inside this compose network only.
+# Published: Caddy (80, 443) and the broker's TLS port 5671 for the agent, which
+# runs outside the server (task 038). Everything else, plain AMQP 5672 and the
+# RabbitMQ management API included, is reachable inside this network only.
 name: aeroflow
 
 x-infra: &infra
@@ -29,6 +30,7 @@ x-core: &core
     TTS_BASE_URL: http://tts:8080
     AIRPORT_TIMEZONE: ${AIRPORT_TIMEZONE:-Europe/Chisinau}
     JWT_PASSPHRASE: ${JWT_PASSPHRASE}
+    AGENT_TOKEN: ${AGENT_TOKEN:?}
 
 x-playback: &playback
   image: ghcr.io/vasilii-kostiuc/aeroflow-playback:${PLAYBACK_TAG:-latest}
@@ -48,7 +50,7 @@ x-playback: &playback
 
 services:
   # HTTPS entry point (certificate from Let's Encrypt for ${DOMAIN}), the web SPA
-  # and the /api route to core's PHP-FPM.
+  # and the /api and /internal routes to core's PHP-FPM.
   caddy:
     image: ghcr.io/vasilii-kostiuc/aeroflow-web:${WEB_TAG:-latest}
     restart: unless-stopped
@@ -127,11 +129,18 @@ services:
     # a fixed hostname keeps queues and the user across container re-creation.
     hostname: rabbitmq
     restart: unless-stopped
+    ports:
+      - "5671:5671"
     environment:
       RABBITMQ_DEFAULT_USER: aeroflow
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+      # Read by deploy.sh: the name in the TLS certificate and the agent's password.
+      DOMAIN: ${DOMAIN}
+      AGENT_RABBITMQ_PASSWORD: ${AGENT_RABBITMQ_PASSWORD:?}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+      - rabbitmq_tls:/etc/rabbitmq/tls
+      - ./rabbitmq/tls.conf:/etc/rabbitmq/conf.d/20-tls.conf:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -145,3 +154,4 @@ volumes:
   core_audio:
   postgres_data:
   rabbitmq_data:
+  rabbitmq_tls:

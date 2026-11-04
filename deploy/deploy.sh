@@ -10,7 +10,13 @@ cd "$(dirname "$0")"
 [ -f .env ] || { echo "$(pwd)/.env not found: create it from .env.example" >&2; exit 1; }
 
 docker compose pull --quiet
+
+# The broker's TLS certificate lives in a volume and is issued once, before the
+# broker starts: its TLS listener needs the files.
+docker compose run --rm --no-deps -T --entrypoint sh rabbitmq -s < rabbitmq/issue-certificate.sh
+
 docker compose up -d --wait postgres rabbitmq
+docker compose exec -T rabbitmq sh -s < rabbitmq/agent-user.sh
 
 # Core's JWT signing keys live in a volume, never in an image: generated once.
 docker compose run --rm --no-deps --user www-data core-app \
